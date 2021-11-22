@@ -80,8 +80,6 @@ $TIMEOUT_EXEC $ABORT_AFTER tail -f $MONITOR_LOG | while read LINE; do # give 60 
     interface_port="${LINE: -4}"
 
     web_interface="localhost:$interface_port/api/tunnels"
-
-    info "ngrok with port $port's web interface: $web_interface"
   fi
 
   if [[ "${LINE}" == *"client session established"* ]]; then
@@ -91,11 +89,14 @@ $TIMEOUT_EXEC $ABORT_AFTER tail -f $MONITOR_LOG | while read LINE; do # give 60 
 
     tunnel_url=$(curl -s "$web_interface" | jq -r '.tunnels[] | select(.proto=="tcp")'.public_url)
 
+    info "ngrok with port $PORT's"
+    info "web interface: $web_interface"
+    info "tunnel url: $tunnel_url"
+
     notify "Dear $NGCRON_NAME, $PROTOCOL Tunnel established from $NGCRON_ORG_NAME\nURL: $tunnel_url"
 
     sleep $KEEPALIVE
 
-    info "Dear $NGCRON_NAME, Disconnecting $PROTOCOL tunnel from $NGCRON_ORG_NAME after $KEEPALIVE s"
     kill -KILL $(tailpid)
 
     exit 0

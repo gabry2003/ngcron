@@ -38,5 +38,30 @@ And insert
 @reboot sleep 5 && ngcron 22 'SSH' '/opt/ngrok/ngrok.yml' &
 ```
 
+Example of start two ngrok at start up:
+** crontab -e **
+
+In this way cron wait 5 seconds and after start two ngrok async with a delay of 10 seconds.
+
+```
+@reboot sleep 5 && declare -a files=( "/usr/bin/on_reboot_ssh.sh" "/usr/bin/on_reboot_vnc.sh" ); length=${#files[@]}; for (( i=0; i < ${length}; i++ )); do /usr/bin/bash "${files[i]}" & sleep 10; done
+```
+
+** /usr/bin/on_reboot_ssh.sh **
+
+``` bash
+##!/bin/bash
+
+ngcron 22 'SSH' '/opt/ngrok/ngrok.yml'
+```
+
+** /usr/bin/on_reboot_vnc.sh **
+
+``` bash
+##!/bin/bash
+
+ngcron 5901 'VNC' '/opt/ngrok/another_ngrok.yml'
+```
+
 ## Logs
 Logs is in file: "/tmp/ngrok.log"
