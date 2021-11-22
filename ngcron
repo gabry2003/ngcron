@@ -1,0 +1,106 @@
+#!/bin/bash
+
+set -e
+
+source /opt/ngcron/env
+
+KEEPALIVE="604800" # keep alive 1 week
+ABORT_AFTER="60"  # abort after 1 minute
+MONITOR_LOG="/tmp/ngrok.log"  # Log file
+
+PORT="$1"
+PROTOCOL="$2"
+CONFIG_FILE="$3"
+
+function now {
+  /bin/date '+%Y-%m-%d %H:%M:%S %Z'
+}
+
+function info {
+  echo "[$(now)] $@"
+}
+
+function die {
+  info $@ >&2
+  exit 1
+}
+
+function tailpid {
+  ps -eopid,command | grep "[t]ail -f $MONITOR_LOG" | awk '{print $1}'
+}
+
+function notify {
+  curl -s -X POST -H 'Content-type: application/json' --data "{\"text\":\"#$NGCRON_HASHTAG\n$(now)\n$@\"}" "$NGCRON_WEBHOOK" > /dev/null
+}
+
+function cleanup {
+  if [ -n "$ngrok_pid" ]; then
+    if (ps -p $ngrok_pid -opid,command | grep -q ngrok); then
+      info "Bringing down ngrok at pid $ngrok_pid"
+      kill -KILL $ngrok_pid
+      notify "Killed $PROTOCOL tunnel."
+    fi
+  fi
+
+  if [ -n "$(tailpid)" ]; then
+    info "Bringing down tail"
+    kill -KILL $(tailpid)
+  fi
+}
+
+trap cleanup EXIT
+
+if [ -z "$NGCRON_WEBHOOK" ]; then
+  die "NGCRON_WEBHOOK must be set!"
+fi
+
+if (which gtimeout &> /dev/null); then
+  export TIMEOUT_EXEC=gtimeout
+else
+  if !(which timeout &> /dev/null || which gtimeout &> /dev/null); then
+    die "This script requires GNU timeout"
+  fi
+  export TIMEOUT_EXEC=timeout
+fi
+
+if (ps -eopid,command | grep -q "[n]ngrok tcp -config $CONFIG_FILE --log stdout $PORT"); then
+  info "ngrok is already running with port $PORT, exiting."
+  exit 0
+fi
+
+&> $MONITOR_LOG ngrok tcp -config $CONFIG_FILE --log stdout $PORT &
+
+ngrok_pid=$!
+info "ngrok pid with port $PORT is $ngrok_pid"
+interface_port=""
+web_interface=""
+
+$TIMEOUT_EXEC $ABORT_AFTER tail -f $MONITOR_LOG | while read LINE; do # give 60 sec to establish a successful connection
+  if [[ "${LINE}" == *"starting web service"* ]]; then
+    interface_port="${LINE: -4}"
+
+    web_interface="localhost:$interface_port/api/tunnels"
+
+    info "ngrok with port $port's web interface: $web_interface"
+  fi
+
+  if [[ "${LINE}" == *"client session established"* ]]; then
+    sleep 5
+
+    info "$PROTOCOL Tunnel connected"
+
+    tunnel_url=$(curl -s "$web_interface" | jq -r '.tunnels[] | select(.proto=="tcp")'.public_url)
+
+    notify "Dear $NGCRON_NAME, $PROTOCOL Tunnel established from $NGCRON_ORG_NAME\nURL: $tunnel_url"
+
+    sleep $KEEPALIVE
+
+    info "Dear $NGCRON_NAME, Disconnecting $PROTOCOL tunnel from $NGCRON_ORG_NAME after $KEEPALIVE s"
+    kill -KILL $(tailpid)
+
+    exit 0
+  fi
+done
+
+notify "Dear $NGCRON_NAME, Failed to establish $PROTOCOL tunnel from $NGCRON_ORG_NAME"
+die "Dear $NGCRON_NAME, Could not establish $PROTOCOL ngrok connection from $NGCRON_ORG_NAME"
