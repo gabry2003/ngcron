@@ -1,0 +1,4 @@
+#!/bin/bash
+
+# Send message on slack
+curl -s -X POST -H 'Content-type: application/json' --data "{\"text\":\"$1\"}" "$2" > /dev/null

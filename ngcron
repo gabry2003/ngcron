@@ -4,6 +4,11 @@ set -e
 
 source /opt/ngcron/env
 
+if [ -z "$var" ]
+then
+  NGCRON_NAME="Dear $NGCRON_NAME,"
+fi
+
 KEEPALIVE="604800" # keep alive 1 week
 ABORT_AFTER="60"  # abort after 1 minute
 MONITOR_LOG="/tmp/ngrok.log"  # Log file
@@ -30,7 +35,13 @@ function tailpid {
 }
 
 function notify {
-  curl -s -X POST -H 'Content-type: application/json' --data "{\"text\":\"#$NGCRON_HASHTAG\n$(now)\n$@\"}" "$NGCRON_WEBHOOK" > /dev/null
+  if test -f "./send_msg"; then  # If script exists
+    # Call this script to send message
+    ./send_msg "#$NGCRON_HASHTAG\n$(now)\n$@" "$NGCRON_WEBHOOK"
+  else
+    # Else send message to slack
+    ./slack "#$NGCRON_HASHTAG\n$(now)\n$@" "$NGCRON_WEBHOOK"
+  fi
 }
 
 function cleanup {
@@ -63,7 +74,7 @@ else
   export TIMEOUT_EXEC=timeout
 fi
 
-if (ps -eopid,command | grep -q "[n]ngrok tcp -config $CONFIG_FILE --log stdout $PORT"); then
+if (ps -eopid,command | grep -q "[n]grok tcp -config $CONFIG_FILE --log stdout $PORT"); then
   info "ngrok is already running with port $PORT, exiting."
   exit 0
 fi
@@ -89,11 +100,11 @@ $TIMEOUT_EXEC $ABORT_AFTER tail -f $MONITOR_LOG | while read LINE; do # give 60 
 
     tunnel_url=$(curl -s "$web_interface" | jq -r '.tunnels[] | select(.proto=="tcp")'.public_url)
 
-    info "ngrok with port $PORT's"
+    info "ngrok with port $PORT"
     info "web interface: $web_interface"
     info "tunnel url: $tunnel_url"
 
-    notify "Dear $NGCRON_NAME, $PROTOCOL Tunnel established from $NGCRON_ORG_NAME\nURL: $tunnel_url"
+    notify "$NGCRON_NAME $PROTOCOL Tunnel established from $NGCRON_ORG_NAME\nURL: $tunnel_url"
 
     sleep $KEEPALIVE
 
@@ -103,5 +114,5 @@ $TIMEOUT_EXEC $ABORT_AFTER tail -f $MONITOR_LOG | while read LINE; do # give 60 
   fi
 done
 
-notify "Dear $NGCRON_NAME, Failed to establish $PROTOCOL tunnel from $NGCRON_ORG_NAME"
-die "Dear $NGCRON_NAME, Could not establish $PROTOCOL ngrok connection from $NGCRON_ORG_NAME"
+notify "$NGCRON_NAME Failed to establish $PROTOCOL tunnel from $NGCRON_ORG_NAME"
+die "$NGCRON_NAME Could not establish $PROTOCOL ngrok connection from $NGCRON_ORG_NAME"
