@@ -37,10 +37,10 @@ function tailpid {
 function notify {
   if test -f "./send_msg"; then  # If script exists
     # Call this script to send message
-    ./send_msg "#$NGCRON_HASHTAG\n$(now)\n$@" "$NGCRON_WEBHOOK"
+    /opt/ngcron/send_msg "#$NGCRON_HASHTAG\n$(now)\n$@" "$NGCRON_WEBHOOK"
   else
     # Else send message to slack
-    ./slack "#$NGCRON_HASHTAG\n$(now)\n$@" "$NGCRON_WEBHOOK"
+    /opt/ngcron/slack "#$NGCRON_HASHTAG\n$(now)\n$@" "$NGCRON_WEBHOOK"
   fi
 }
 
